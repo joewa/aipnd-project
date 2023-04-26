@@ -51,6 +51,113 @@ class Network(nn.Module):
         return F.log_softmax(x, dim=1)
 
 
+def get_dataloaders(data_dir='flowers', batch_size=64):
+    train_dir = data_dir + '/train'
+    valid_dir = data_dir + '/valid'
+    test_dir = data_dir + '/test'
+    data_transforms = {
+        'train': transforms.Compose([
+            transforms.RandomRotation(30),
+            transforms.RandomResizedCrop(img_size),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize(norm_means, norm_std)
+        ]),
+        'valid': transforms.Compose([
+            transforms.Resize(255),
+            transforms.CenterCrop(img_size),
+            transforms.ToTensor(),
+            transforms.Normalize(norm_means, norm_std)
+        ]),
+    }
+    data_transforms['test'] = data_transforms['valid']
+
+    # TODO: Load the datasets with ImageFolder
+    image_datasets = {
+        'train': datasets.ImageFolder(train_dir, transform=data_transforms['train']),
+        'valid': datasets.ImageFolder(valid_dir, transform=data_transforms['valid']),
+        'test':  datasets.ImageFolder(test_dir,  transform=data_transforms['test']),
+    }
+
+    # TODO: Using the image datasets and the trainforms, define the dataloaders
+    dataloaders = {
+        'train': torch.utils.data.DataLoader(image_datasets['train'], batch_size=batch_size, shuffle=True),
+        'valid': torch.utils.data.DataLoader(image_datasets['valid'], batch_size=batch_size, shuffle=False),
+        'test': torch.utils.data.DataLoader(image_datasets['test'], batch_size=batch_size, shuffle=False),
+    }
+    return image_datasets, dataloaders
+
+
+def load_arch(model_name, hidden_layers):
+    #weigths = getattr(models, model_name.upper()+'_Weights').DEFAULT
+    #model = getattr(models, model_name)(weights=weigths)
+    model = getattr(models, model_name)(pretrained=True)
+    if isinstance(model.classifier, list):
+        n_features = model.classifier[0].in_features
+    else:
+        n_features = model.classifier.in_features
+    model_classifier = Network(n_features, 102, hidden_layers)
+    # Freeze parameters so we don't backprop through them
+    for param in model.parameters():
+        param.requires_grad = False
+    model.classifier = model_classifier
+    return model
+
+
+def train(model, dataloaders, epochs, learning_rate, optimizer=None):
+    criterion = nn.NLLLoss()
+
+    # Only train the classifier parameters, feature parameters are frozen
+    if optimizer is None:
+        optimizer = optim.Adam(model.classifier.parameters(), lr=learning_rate)
+
+    model.to(device)
+
+    steps = 0
+    running_loss = 0
+    print_every = 5
+    for epoch in range(epochs):
+        for inputs, labels in dataloaders['train']:
+            steps += 1
+            # Move input and label tensors to the default device
+            inputs, labels = inputs.to(device), labels.to(device)
+
+            optimizer.zero_grad()
+
+            logps = model.forward(inputs)
+            loss = criterion(logps, labels)
+            loss.backward()
+            optimizer.step()
+
+            running_loss += loss.item()
+
+            if steps % print_every == 0:
+                test_loss = 0
+                accuracy = 0
+                model.eval()
+                with torch.no_grad():
+                    for inputs, labels in dataloaders['valid']:
+                        inputs, labels = inputs.to(device), labels.to(device)
+                        logps = model.forward(inputs)
+                        batch_loss = criterion(logps, labels)
+
+                        test_loss += batch_loss.item()
+
+                        # Calculate accuracy
+                        ps = torch.exp(logps)
+                        top_p, top_class = ps.topk(1, dim=1)
+                        equals = top_class == labels.view(*top_class.shape)
+                        accuracy += torch.mean(equals.type(torch.FloatTensor)).item()
+
+                print(f"Epoch {epoch+1}/{epochs}.. "
+                      f"Train loss: {running_loss/print_every:.3f}.. "
+                      f"Test loss: {test_loss/len(dataloaders['valid']):.3f}.. "
+                      f"Test accuracy: {accuracy/len(dataloaders['valid']):.3f}")
+                running_loss = 0
+                model.train()
+    return model, optimizer
+
+
 def load_checkpoint(filepath):
     import importlib
 

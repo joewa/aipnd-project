@@ -6,7 +6,7 @@ import utils
 
 argparser = argparse.ArgumentParser(
         description='Predict a flower name from an image.',
-        usage='python predict.py ./data_sets/valid/1/img.jpg'
+        usage='python predict.py ./flowers/valid/1/img.jpg'
     )
 argparser.add_argument('image_path', type=str, help='path to image file')
 argparser.add_argument('checkpoint', type=str, help='path to Checkpoint file')
@@ -38,6 +38,8 @@ def main(args):
     top_p, top_class = utils.predict(args.image_path, model, topk=args.topk)
     top_p_list = top_p.squeeze().tolist()
     top_class_names = [cat_to_name[c] for c in top_class]
+    if not isinstance(top_p_list, list):
+        top_p_list = [top_p_list]
 
     for n in range(args.topk):
         print('Prediction:{0}; Probability:{1}'.format(top_class_names[n], top_p_list[n]))
