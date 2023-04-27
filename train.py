@@ -14,10 +14,12 @@ argparser.add_argument('--checkpoint', type=str, default='checkpoint.pth', help=
 argparser.add_argument('--gpu', action='store_true', default=False, help='use GPU for prediction if available')
 argparser.add_argument('--save_dir', type=str, default='checkpoint.pth', help='name of the checkpoint file')
 argparser.add_argument('--arch', type=str, default='densenet121',
-                    help='NN architecture from https://pytorch.org/vision/stable/models.html',)
+                       help='NN architecture from https://pytorch.org/vision/stable/models.html',)
 argparser.add_argument('--learning_rate', type=float, default=0.003, help='learning rate. default=0.01')
 argparser.add_argument('--epochs', type=int, default=3, help='number of epochs')
 argparser.add_argument('--hidden_units_list', nargs='+', type=int, required=True, help='list of hidden units per layer')
+argparser.add_argument('--batch_size', type=int, default=64,
+                       help='a higher batch size for dataloaders improves the training speed on the GPU but might cause out of memory')
 args = argparser.parse_args()
 
 
@@ -32,7 +34,7 @@ def main(args):
         print('Info -- Using CPU')
         utils.device = utils.torch.device('cpu')
 
-    image_datasets, dataloaders = utils.get_dataloaders(data_dir=args.data_directory, batch_size=64)
+    image_datasets, dataloaders = utils.get_dataloaders(data_dir=args.data_directory, batch_size=args.batch_size)
     # Load the model's architecture
     model = utils.load_arch(args.arch, args.hidden_units_list)
 
